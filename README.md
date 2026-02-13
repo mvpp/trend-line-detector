@@ -65,6 +65,48 @@ MPLBACKEND=Agg python main.py --ticker MUSI --period 6mo --left-span 3 --right-s
 | `--savefig` | none | Save chart to file |
 | `--verbose` | off | Print detailed pivot/line info |
 
+## Python API
+
+Each module is independently importable — compose your own pipeline or integrate into existing workflows:
+
+```python
+from data_fetcher import fetch_ohlcv
+from volume_classifier import classify_volume_context
+from pivot_detector import detect_pivots
+from trend_fitter import fit_trend_lines
+from visualizer import plot_trend_lines
+
+# Fetch and prepare data
+df = fetch_ohlcv("AAPL", period="1y")
+df = classify_volume_context(df)
+
+# Detect pivots and fit trend lines
+res_pivots, sup_pivots = detect_pivots(df)
+res_lines = fit_trend_lines(res_pivots, "resistance", df)
+sup_lines = fit_trend_lines(sup_pivots, "support", df)
+
+# Visualize (saves to file; omit savefig for interactive display)
+plot_trend_lines(df, sup_pivots, res_pivots, sup_lines, res_lines,
+                 title="AAPL", savefig="chart.png")
+
+# Access individual line attributes
+for line in sup_lines:
+    print(f"Support: {line.touch_count} touches, slope={line.slope:.4f}, "
+          f"score={line.score:.2f}, {line.start_date.date()} to {line.end_date.date()}")
+```
+
+### Module Reference
+
+| Module | Function | Return Type |
+|---|---|---|
+| `data_fetcher` | `fetch_ohlcv(ticker, period, interval)` | `pd.DataFrame` (OHLCV with DatetimeIndex) |
+| `volume_classifier` | `classify_volume_context(df, lookback, high_vol_multiplier)` | `pd.DataFrame` (adds VolSMA, IsHighVolume, ResistancePrice, SupportPrice) |
+| `pivot_detector` | `detect_pivots(df, left_span, right_span)` | `tuple[pd.DataFrame, pd.DataFrame]` (resistance pivots, support pivots) |
+| `trend_fitter` | `fit_trend_lines(pivots, line_type, ohlcv_df, tolerance_pct, min_touches, max_lines)` | `list[TrendLine]` sorted by score descending |
+| `visualizer` | `plot_trend_lines(df, sup_pivots, res_pivots, sup_lines, res_lines, title, savefig, show_pivots, dash_lines)` | `None` (renders or saves chart) |
+
+The `TrendLine` dataclass exposes: `slope`, `intercept`, `touch_count`, `score`, `start_bar`, `end_bar`, `start_date`, `end_date`, `ssr`, `avg_volume_at_touches`, `line_type`, `pivot_indices`.
+
 ## Configuration
 
 All tunable constants are centralized in `config.py` with documentation. Key categories:
