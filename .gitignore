@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
+# Generated charts
+*.png
+
+# macOS
+.DS_Store
+
+# Claude Code
+.claude/
