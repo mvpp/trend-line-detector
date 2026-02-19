@@ -45,6 +45,30 @@ MIN_PIVOTS_FALLBACK = 6
 MIN_SPAN_FALLBACK = 2
 
 # ──────────────────────────────────────────────────────────────────────
+# Pivot quality scoring  (pivot_detector.py)
+# ──────────────────────────────────────────────────────────────────────
+
+# Exponents for the geometric-mean composite quality score.
+# Prominence gets the most weight (structural significance), volume
+# strength next (institutional participation), bounce least (confirmation).
+PIVOT_QUALITY_PROMINENCE_EXP = 0.40
+PIVOT_QUALITY_VOLUME_EXP = 0.35
+PIVOT_QUALITY_BOUNCE_EXP = 0.25
+
+# Bars after the pivot to measure post-pivot reversal strength.
+BOUNCE_LOOKAHEAD_BARS = 3
+
+# Volume strength is clamped to [min, max] then normalized to [0, 1]
+# by dividing by max.  Min prevents division-by-zero artifacts on
+# extremely low-volume bars; max caps outlier spikes.
+VOLUME_STRENGTH_MIN = 0.1
+VOLUME_STRENGTH_MAX = 5.0
+
+# Floor for bounce so rightmost pivots (no look-ahead data) don't
+# zero out the entire quality via 0^0.25.  0.1^0.25 ≈ 0.56 = neutral.
+BOUNCE_FLOOR = 0.1
+
+# ──────────────────────────────────────────────────────────────────────
 # Trend fitter  (trend_fitter.py)
 # ──────────────────────────────────────────────────────────────────────
 

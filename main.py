@@ -58,7 +58,7 @@ def main() -> None:
     print(f"  High-volume bars: {hv_count}/{len(df)} ({100 * hv_count / len(df):.1f}%)")
 
     # Step 3: Pivot detection
-    res_pivots, sup_pivots = detect_pivots(df, args.left_span, args.right_span)
+    res_pivots, sup_pivots = detect_pivots(df, args.left_span, args.right_span, ohlcv_df=df)
     print(f"  Resistance pivots: {len(res_pivots)}")
     print(f"  Support pivots:    {len(sup_pivots)}")
 
@@ -66,13 +66,19 @@ def main() -> None:
         print("\n  Resistance pivots:")
         for _, p in res_pivots.iterrows():
             flag = " [HIGH VOL]" if p["is_high_volume"] else ""
-            print(f"    {p['date'].date()}  price={p['price']:.2f}  vol={p['volume']:.0f}{flag}")
+            print(f"    {p['date'].date()}  price={p['price']:.2f}  vol={p['volume']:.0f}"
+                  f"  q={p['pivot_quality']:.3f}"
+                  f" (prom={p['prominence']:.3f} vs={p['volume_strength']:.3f}"
+                  f" bnc={p['bounce']:.3f}){flag}")
 
     if args.verbose and not sup_pivots.empty:
         print("\n  Support pivots:")
         for _, p in sup_pivots.iterrows():
             flag = " [HIGH VOL]" if p["is_high_volume"] else ""
-            print(f"    {p['date'].date()}  price={p['price']:.2f}  vol={p['volume']:.0f}{flag}")
+            print(f"    {p['date'].date()}  price={p['price']:.2f}  vol={p['volume']:.0f}"
+                  f"  q={p['pivot_quality']:.3f}"
+                  f" (prom={p['prominence']:.3f} vs={p['volume_strength']:.3f}"
+                  f" bnc={p['bounce']:.3f}){flag}")
 
     # Step 4: Fit trend lines
     res_lines = fit_trend_lines(

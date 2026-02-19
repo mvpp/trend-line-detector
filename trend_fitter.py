@@ -6,7 +6,7 @@ them by touch count / volume / span / recency, and deduplicates near-parallel
 or overlapping lines.
 
 Key design decisions:
-  - First and last detected pivots are excluded from fitting (boundary artifacts).
+  - Last detected pivot is excluded from fitting (boundary artifact).
   - Candle-through validation is tiered: zero violations for < 4 touches,
     5% allowed for >= 4 touches or near-horizontal lines.
   - Deduplication uses four criteria (slope/intercept similarity, pivot overlap,
@@ -74,12 +74,12 @@ def fit_trend_lines(
     if len(pivots) < min_touches:
         return []
 
-    # --- Fix 2: Exclude first and last pivot from fitting ---
+    # Exclude only the last (rightmost) pivot from fitting
     sorted_pivots = pivots.sort_values("bar_index").reset_index(drop=True)
-    if len(sorted_pivots) > 2:
-        fitting_pivots = sorted_pivots.iloc[1:-1].reset_index(drop=True)
+    if len(sorted_pivots) > 1:
+        fitting_pivots = sorted_pivots.iloc[:-1].reset_index(drop=True)
     else:
-        return []  # removing first+last leaves <= 0 pivots
+        return []  # removing last leaves 0 pivots
 
     if len(fitting_pivots) < min_touches:
         return []
@@ -88,6 +88,12 @@ def fit_trend_lines(
     bar_indices = fitting_pivots["bar_index"].values.astype(int)
     volumes = fitting_pivots["volume"].values
 
+    # Pivot quality scores for touch weighting
+    if "pivot_quality" in fitting_pivots.columns:
+        pivot_qualities = fitting_pivots["pivot_quality"].values
+    else:
+        pivot_qualities = np.ones(len(fitting_pivots))
+
     price_range = prices.max() - prices.min()
     if price_range == 0:
         return []
@@ -95,6 +101,12 @@ def fit_trend_lines(
 
     total_bars = len(ohlcv_df)
     P = len(fitting_pivots)
+
+    # OHLC arrays for wick-aware residual and candle-through validation
+    ohlc_opens = ohlcv_df["Open"].values
+    ohlc_closes = ohlcv_df["Close"].values
+    ohlc_highs = ohlcv_df["High"].values
+    ohlc_lows = ohlcv_df["Low"].values
 
     # --- Candidate generation O(P^2) pairs, O(P) check each = O(P^3) ---
     candidates: List[TrendLine] = []
@@ -112,7 +124,30 @@ def fit_trend_lines(
             residuals = []
             for k in range(P):
                 expected = slope * bar_indices[k] + intercept
-                residual = prices[k] - expected
+                bi = bar_indices[k]
+
+                # Wick-aware residual: line touching the wick beyond the
+                # body edge counts as zero error, capped at one body height
+                # so excessively long wicks don't get a free pass.
+                if line_type == "support":
+                    body_bottom = min(ohlc_opens[bi], ohlc_closes[bi])
+                    body_top = max(ohlc_opens[bi], ohlc_closes[bi])
+                    body_height = body_top - body_bottom
+                    wick_floor = max(ohlc_lows[bi], body_bottom - body_height)
+                    if wick_floor <= expected <= body_bottom:
+                        residual = 0.0
+                    else:
+                        residual = prices[k] - expected
+                else:  # resistance
+                    body_bottom = min(ohlc_opens[bi], ohlc_closes[bi])
+                    body_top = max(ohlc_opens[bi], ohlc_closes[bi])
+                    body_height = body_top - body_bottom
+                    wick_ceil = min(ohlc_highs[bi], body_top + body_height)
+                    if body_top <= expected <= wick_ceil:
+                        residual = 0.0
+                    else:
+                        residual = prices[k] - expected
+
                 if abs(residual) <= tolerance:
                     touching.append(k)
                     residuals.append(residual)
@@ -141,8 +176,6 @@ def fit_trend_lines(
 
     # --- Fix 3: Tiered candle-through validation (BEFORE dedup) ---
     valid = []
-    highs = ohlcv_df["High"].values
-    lows = ohlcv_df["Low"].values
 
     for c in candidates:
         span = c.end_bar - c.start_bar + 1
@@ -155,9 +188,9 @@ def fit_trend_lines(
         violations = 0
         for bar_idx in range(c.start_bar, c.end_bar + 1):
             line_price = c.slope * bar_idx + c.intercept
-            if line_type == "support" and line_price > highs[bar_idx]:
+            if line_type == "support" and line_price > ohlc_highs[bar_idx]:
                 violations += 1
-            elif line_type == "resistance" and line_price < lows[bar_idx]:
+            elif line_type == "resistance" and line_price < ohlc_lows[bar_idx]:
                 violations += 1
 
         if is_near_horizontal:
@@ -180,8 +213,10 @@ def fit_trend_lines(
     for c in valid:
         touch_bars = bar_indices[c.pivot_indices]
 
-        # Touch weight: exponential
-        touch_weight = TOUCH_WEIGHT_BASE ** c.touch_count
+        # Touch weight: quality-weighted exponential
+        # Each touch contributes its quality (0-1) to the exponent
+        touch_quality_sum = sum(pivot_qualities[idx] for idx in c.pivot_indices)
+        touch_weight = TOUCH_WEIGHT_BASE ** touch_quality_sum
 
         # Volume weight: avg ratio of volume to SMA at each touch
         ratios = []
