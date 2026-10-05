@@ -12,3 +12,8 @@ venv/
 
 # Claude Code
 .claude/
+
+# Packaging
+*.egg-info/
+build/
+dist/

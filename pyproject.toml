@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trend-line-detector"
+version = "0.1.0"
+description = "Volume-adaptive support/resistance trend lines from OHLCV bars, as a pure library"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+examples = ["pandas>=2.0", "yfinance>=0.2.54", "mplfinance>=0.12.9b7"]
+
+[tool.setuptools.packages.find]
+include = ["trend_line_detector*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

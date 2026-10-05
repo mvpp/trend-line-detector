@@ -1,116 +1,85 @@
-# Trend Line Detector
+# trend-line-detector
 
-Volume-adaptive stock trend line detection using Williams Fractal pivot points.
+Volume-adaptive support and resistance trend lines from OHLCV bars, as a pure Python library.
 
-## Overview
+Give it bars and it returns pivots and trend lines. It does no data fetching, plotting, file I/O or global state, and its only dependency is numpy. Callers own the data and the drawing.
 
-Automatically detects support and resistance trend lines on stock price charts. Unlike traditional approaches that only use closing prices, this algorithm adapts its price selection based on volume context:
-
-- **High-volume candles** (> 1.5x 20-day SMA): uses High/Low (wicks carry institutional significance)
-- **Normal-volume candles**: uses max/min of Open and Close (body edges are more meaningful)
-
-Trend lines require at least 3 pivot-point touches and are validated against candle-through violations before being scored and deduplicated.
-
-## Algorithm Pipeline
-
-1. **Fetch** OHLCV data via yfinance
-2. **Classify** each candle's volume context (high vs. normal)
-3. **Detect pivots** using Williams Fractal with adaptive span fallback and boundary scanning
-4. **Fit trend lines** through pivot combinations (O(P^3) where P = pivot count, typically 10-25), with tiered candle-through validation, scoring by touch count / volume / span / recency, and 5-criteria deduplication
-5. **Extend** the rightmost line to the chart edge (with fallback to next-rightmost if validation fails)
-6. **Visualize** with mplfinance candlesticks, volume bars, MACD subplot, and trend line overlays
-
-## Installation
+## Install
 
 ```bash
-git clone https://github.com/mvpp/trend-line-detector.git
-cd trend-line-detector
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+pip install -e .              # library (numpy only)
+pip install -e ".[dev]"       # + pytest
+pip install -e ".[examples]"  # + pandas, yfinance, mplfinance for examples/plot_cli.py
 ```
 
 ## Usage
 
-```bash
-# Basic usage (saves chart to file)
-MPLBACKEND=Agg python main.py --ticker AAPL --period 1y --savefig chart.png
-
-# Show pivot point markers and use dashed lines
-MPLBACKEND=Agg python main.py --ticker TSLA --period 1y --show-pivots --dash-lines --savefig chart.png
-
-# Interactive display (requires GUI backend)
-python main.py --ticker AAPL --period 1y
-
-# Verbose output with custom parameters
-MPLBACKEND=Agg python main.py --ticker MUSI --period 6mo --left-span 3 --right-span 3 --verbose --savefig chart.png
-```
-
-### CLI Options
-
-| Flag | Default | Description |
-|---|---|---|
-| `--ticker` | AAPL | Stock ticker symbol |
-| `--period` | 1y | yfinance period (e.g. 6mo, 1y, 2y) |
-| `--interval` | 1d | yfinance interval (e.g. 1d, 1h) |
-| `--left-span` | 5 | Williams Fractal left window |
-| `--right-span` | 5 | Williams Fractal right window |
-| `--vol-lookback` | 20 | Volume SMA window (days) |
-| `--vol-multiplier` | 1.5 | High-volume threshold multiplier |
-| `--tolerance` | 0.01 | Touch tolerance (fraction of price range) |
-| `--min-touches` | 3 | Minimum pivot touches for a valid line |
-| `--max-lines` | 5 | Max lines per type (support/resistance) |
-| `--show-pivots` | off | Show pivot-point markers |
-| `--dash-lines` | off | Draw dashed trend lines |
-| `--savefig` | none | Save chart to file |
-| `--verbose` | off | Print detailed pivot/line info |
-
-## Python API
-
-Each module is independently importable — compose your own pipeline or integrate into existing workflows:
-
 ```python
-from data_fetcher import fetch_ohlcv
-from volume_classifier import classify_volume_context
-from pivot_detector import detect_pivots
-from trend_fitter import fit_trend_lines
-from visualizer import plot_trend_lines
+from trend_line_detector import Bar, Params, detect
 
-# Fetch and prepare data
-df = fetch_ohlcv("AAPL", period="1y")
-df = classify_volume_context(df)
+bars = [Bar("2026-01-02", 10.0, 10.6, 9.8, 10.4, 1_200_000), ...]   # time order, one per period
+result = detect(bars)                        # or detect(rows, Params(left_span=3))
 
-# Detect pivots and fit trend lines
-res_pivots, sup_pivots = detect_pivots(df)
-res_lines = fit_trend_lines(res_pivots, "resistance", df)
-sup_lines = fit_trend_lines(sup_pivots, "support", df)
+for pv in result.pivots:                     # both kinds, by bar_index
+    print(pv.kind, pv.time, pv.price, pv.quality)
 
-# Visualize (saves to file; omit savefig for interactive display)
-plot_trend_lines(df, sup_pivots, res_pivots, sup_lines, res_lines,
-                 title="AAPL", savefig="chart.png")
-
-# Access individual line attributes
-for line in sup_lines:
-    print(f"Support: {line.touch_count} touches, slope={line.slope:.4f}, "
-          f"score={line.score:.2f}, {line.start_date.date()} to {line.end_date.date()}")
+for ln in result.lines:                      # resistance then support, each best-first
+    print(ln.kind, ln.start_time, ln.start_price, ln.end_time, ln.end_price,
+          ln.touch_count, ln.score, ln.extended)
 ```
 
-### Module Reference
+- **Input:** any iterable of `Bar` or `(time, open, high, low, close[, volume])` tuples, so a DB row works as is.
+  - `time` is an opaque label that is echoed back; it can be a date string, an epoch or an index.
+  - OHLC must be finite, otherwise `detect` raises `ValueError`.
+  - Missing volume counts as 0: no bar is then high-volume, and pivots are read on body edges.
+- **Output:** frozen dataclasses, JSON-ready via `dataclasses.asdict`.
+  - `TrendLine` carries both endpoint prices, so a chart draws it as a two-point segment.
+  - `TrendLine.price_at(i)` projects the line to any bar.
+- **Window:** the result depends on the bars you pass in. Tolerances are a fraction of the window's price range, and scores reward span and recency relative to the window. Pass the window you intend to chart (for example the last 252 daily bars).
 
-| Module | Function | Return Type |
-|---|---|---|
-| `data_fetcher` | `fetch_ohlcv(ticker, period, interval)` | `pd.DataFrame` (OHLCV with DatetimeIndex) |
-| `volume_classifier` | `classify_volume_context(df, lookback, high_vol_multiplier)` | `pd.DataFrame` (adds VolSMA, IsHighVolume, ResistancePrice, SupportPrice) |
-| `pivot_detector` | `detect_pivots(df, left_span, right_span)` | `tuple[pd.DataFrame, pd.DataFrame]` (resistance pivots, support pivots) |
-| `trend_fitter` | `fit_trend_lines(pivots, line_type, ohlcv_df, tolerance_pct, min_touches, max_lines)` | `list[TrendLine]` sorted by score descending |
-| `visualizer` | `plot_trend_lines(df, sup_pivots, res_pivots, sup_lines, res_lines, title, savefig, show_pivots, dash_lines)` | `None` (renders or saves chart) |
+## Algorithm
 
-The `TrendLine` dataclass exposes: `slope`, `intercept`, `touch_count`, `score`, `start_bar`, `end_bar`, `start_date`, `end_date`, `ssr`, `avg_volume_at_touches`, `line_type`, `pivot_indices`.
+1. **Volume context.** A bar is high-volume when its volume is above `vol_multiplier` × the 20-bar volume SMA.
+   - High-volume bars offer their wicks: High for resistance, Low for support.
+   - Normal bars offer their body edges: max/min of Open and Close.
+2. **Pivots (Williams fractal).**
+   - A bar is a pivot when its price is strictly beyond the `left_span` bars before it and the `right_span` bars after it.
+   - Edge bars count if one side of the window is complete.
+   - If there are fewer than `min_pivots` pivots in total, both spans shrink by one (down to `min_span`).
+   - Each pivot gets a quality from 0 to 1: prominence^0.40 × volume strength^0.35 × max(bounce, 0.1)^0.25.
+3. **Candidate lines.**
+   - A line is drawn through every pair of pivots, leaving out the newest pivot.
+   - A pivot touches the line within `tolerance_pct` of the pivots' price range. Passing through the pivot bar's wick (capped at one body height) counts as an exact touch.
+   - Lines need at least `min_touches` touches.
+4. **Candle-through validation.** A support line above a bar's High, or a resistance line below a bar's Low, is a violation.
+   - Lines with fewer than 4 touches are allowed no violations.
+   - Lines with 4 or more touches, or near-horizontal lines, may violate up to 5% of the bars they span.
+5. **Score.** 2^Σ(touch quality) × mean(volume/SMA at the touches) × (span / bars) × (1 + 0.5 × end / bars).
+6. **Deduplication.** Lines are compared longest first. A line is dropped if, against a kept line, it:
+   - has a similar slope and intercept,
+   - shares ≥ 50% of its pivots,
+   - crosses it,
+   - has ≥ 50% of its pivots within ±2 bars of it, or
+   - sits inside it with the same slope sign.
+7. **Extension.** The rightmost surviving line whose projection to the last bar passes the same validation is extended (`extended=True`). At most one line per kind is extended.
 
-## Configuration
+Each kind is then cut to `max_lines`, best first. Line fitting costs O(P³) in the number of pivots P. It runs as one numpy broadcast, about 5–20 ms for a 250-bar window.
 
-All tunable constants are centralized in `config.py` with documentation. Key categories:
+All tunables live on `Params` with documented defaults. Override any of them with `Params(field=value)`.
 
-- **Pivot detection**: fractal span, fallback thresholds
-- **Trend fitting**: candle-through tolerance, scoring weights, deduplication thresholds
-- **Visualization**: line width, figure size, MACD parameters, panel ratios
+## Tests
+
+```bash
+pytest
+```
+
+- `tests/test_parity.py`: the library reproduces the original scripts' pivots, lines and scores exactly, on recorded synthetic fixtures.
+- `tests/test_api.py`: input handling, edge cases (empty, short, flat, no volume, non-finite) and the output contract.
+
+## Example CLI
+
+```bash
+MPLBACKEND=Agg python examples/plot_cli.py --ticker AAPL --period 1y --show-pivots --savefig chart.png
+```
+
+Every `Params` field is also a flag, for example `--left-span 3` or `--tolerance-pct 0.02`.
