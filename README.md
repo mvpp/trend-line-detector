@@ -61,7 +61,8 @@ for ln in result.lines:                      # resistance then support, each bes
    - shares ≥ 50% of its pivots,
    - crosses it,
    - has ≥ 50% of its pivots within ±2 bars of it, or
-   - sits inside it with the same slope sign.
+   - sits inside it with the same slope sign, or
+   - with `Params(time_overlap_dedup=0.7)`, overlaps its bar range by more than 70% of the shorter range (the longer line is kept; off by default).
 7. **Extension.** The rightmost surviving line whose projection to the last bar passes the same validation is extended (`extended=True`). At most one line per kind is extended.
    - With `Params(max_projection_gap=0.05)`, the projection must also end within ±5% of the last close; otherwise the next-rightmost line is tried.
    - The default (`None`) has no distance limit.
@@ -79,6 +80,7 @@ pytest
 - `tests/test_parity.py`: the library reproduces the original scripts' pivots, lines and scores exactly, on recorded synthetic fixtures.
 - `tests/test_api.py`: input handling, edge cases (empty, short, flat, no volume, non-finite) and the output contract.
 - `tests/test_projection_gap.py`: projections respect `max_projection_gap`, and the gap changes only the projection, never which lines are found.
+- `tests/test_time_overlap_dedup.py`: with `time_overlap_dedup`, no two same-kind lines overlap beyond the limit, and the longer one survives.
 
 ## Example CLI
 

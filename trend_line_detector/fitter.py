@@ -14,8 +14,9 @@ extend one line to the last bar.
               × (span / n) × (1 + recency_coeff × end / n)
   dedup       longest-first; a line is dropped if it matches a kept line on
               slope+intercept, shares ≥ 50% pivots, crosses it, has ≥ 50%
-              pivots within ±2 bars of it, or sits inside it with the same
-              slope sign
+              pivots within ±2 bars of it, sits inside it with the same
+              slope sign, or (when time_overlap_dedup is set) overlaps its
+              bar range by more than that share of the shorter range
   extension   the rightmost surviving line whose projection to the last bar
               passes the same validation (and, when max_projection_gap is
               set, ends within that fraction of the last close) is extended
@@ -130,7 +131,18 @@ def _is_duplicate(c: FittedLine, k: FittedLine, price_range: float, p: Params) -
     if c_bars and adjacent / len(c_bars) >= p.dedup_overlap_ratio:
         return True
     # 5. same direction and c's range inside k's (k is never shorter)
-    return c.slope * k.slope >= 0 and c.start_bar >= k.start_bar and c.end_bar <= k.end_bar
+    if c.slope * k.slope >= 0 and c.start_bar >= k.start_bar and c.end_bar <= k.end_bar:
+        return True
+    # 6. time-range overlap beyond the share of the shorter line (k is never shorter)
+    return p.time_overlap_dedup is not None and _range_overlap(c, k) > p.time_overlap_dedup
+
+
+def _range_overlap(a: FittedLine, b: FittedLine) -> float:
+    """Overlap of two lines' bar ranges as a share of the shorter range."""
+    shorter = min(a.end_bar - a.start_bar, b.end_bar - b.start_bar)
+    if shorter <= 0:
+        return 0.0
+    return max(0, min(a.end_bar, b.end_bar) - max(a.start_bar, b.start_bar)) / shorter
 
 
 def _deduplicate(lines: list[FittedLine], price_range: float, p: Params) -> list[FittedLine]:
