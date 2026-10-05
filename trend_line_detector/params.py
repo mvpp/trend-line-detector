@@ -69,6 +69,6 @@ class Params:
     dedup_overlap_ratio: float = 0.50
     adjacent_pivot_bars: int = 2
     # Same-kind lines whose bar ranges overlap by more than this share of the
-    # shorter line's range are duplicates; the longer line is kept.
+    # union of both ranges are duplicates; the longer line is kept.
     # None = rule off.
     time_overlap_dedup: float | None = None

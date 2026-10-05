@@ -1,4 +1,4 @@
-"""time_overlap_dedup: same-kind lines overlapping > X of the shorter range collapse to the longer."""
+"""time_overlap_dedup: same-kind lines overlapping > X of their ranges' union collapse to the longer."""
 
 import json
 from itertools import combinations
@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from trend_line_detector import Bar, Params, detect
+from trend_line_detector.fitter import FittedLine, _is_duplicate, _range_overlap
 
 FIXTURES = sorted((Path(__file__).parent / "fixtures").glob("*.json"))
 LIMIT = 0.70
@@ -22,9 +23,9 @@ def overlapping_pairs(lines, limit):
     for a, b in combinations(lines, 2):
         if a.kind != b.kind:
             continue
-        shorter = min(a.touch_end_index - a.start_index, b.touch_end_index - b.start_index)
+        union = max(a.touch_end_index, b.touch_end_index) - min(a.start_index, b.start_index)
         overlap = min(a.touch_end_index, b.touch_end_index) - max(a.start_index, b.start_index)
-        if shorter > 0 and max(0, overlap) / shorter > limit:
+        if union > 0 and max(0, overlap) / union > limit:
             out.append((a, b))
     return out
 
@@ -35,9 +36,27 @@ def test_no_same_kind_pair_overlaps_beyond_limit(path):
     assert overlapping_pairs(result.lines, LIMIT) == []
 
 
-def test_rule_bites_on_the_fixtures():
-    # Guards the test above from passing vacuously.
-    assert any(overlapping_pairs(detect(b).lines, LIMIT) for b in map(bars_of, FIXTURES))
+def line(start, end, slope=0.0, intercept=100.0, touches=(0,)):
+    return FittedLine(slope, intercept, list(touches), list(range(len(touches))), start, end)
+
+
+@pytest.mark.parametrize("a, b, share", [
+    ((0, 100), (20, 100), 0.80),    # inside, union = longer range
+    ((0, 100), (50, 150), 1 / 3),   # half-shifted: overlap 50 of union 150
+    ((0, 100), (100, 200), 0.0),    # touching ends
+    ((0, 100), (150, 200), 0.0),    # disjoint
+])
+def test_range_overlap_is_share_of_union(a, b, share):
+    assert _range_overlap(line(*a), line(*b)) == pytest.approx(share)
+
+
+def test_overlap_rule_flags_beyond_limit_only():
+    # Opposite slopes and disjoint pivots, so only rule 6 can fire.
+    p = Params(time_overlap_dedup=LIMIT)
+    longer = line(0, 100, slope=0.5, touches=(0, 50, 100))
+    assert _is_duplicate(line(20, 100, slope=-0.5, intercept=200, touches=(30, 70, 95)), longer, 100.0, p)   # 0.80
+    assert not _is_duplicate(line(35, 100, slope=-0.5, intercept=200, touches=(40, 70, 95)), longer, 100.0, p)  # 0.65
+    assert not _is_duplicate(line(20, 100, slope=-0.5, intercept=200, touches=(30, 70, 95)), longer, 100.0, Params())
 
 
 def test_longer_line_survives():
