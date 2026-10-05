@@ -52,6 +52,11 @@ class Params:
     violation_relaxed: float = 0.05
     violation_relaxed_min_touches: int = 4
 
+    # Projection: a line extended to the last bar must end within this
+    # fraction of the last close (|end / close − 1| ≤ gap), otherwise the
+    # next-rightmost line is tried. None = no distance limit.
+    max_projection_gap: float | None = None
+
     # Score = touch_weight_base ^ Σ(touch quality) × volume × span × recency,
     # recency = 1 + coeff × end_index / n.
     touch_weight_base: float = 2.0

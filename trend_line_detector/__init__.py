@@ -17,4 +17,4 @@ from .models import Bar, Pivot, Result, TrendLine
 from .params import Params
 
 __all__ = ["Bar", "Params", "Pivot", "Result", "TrendLine", "detect"]
-__version__ = "0.1.0"
+__version__ = "0.2.0"

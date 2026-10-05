@@ -35,6 +35,7 @@ for ln in result.lines:                      # resistance then support, each bes
 - **Output:** frozen dataclasses, JSON-ready via `dataclasses.asdict`.
   - `TrendLine` carries both endpoint prices, so a chart draws it as a two-point segment.
   - `TrendLine.price_at(i)` projects the line to any bar.
+  - `touch_end_*` is the line's last touch. It equals `end_*` unless `extended` is true, in which case `end_*` is the projection to the last bar.
 - **Window:** the result depends on the bars you pass in. Tolerances are a fraction of the window's price range, and scores reward span and recency relative to the window. Pass the window you intend to chart (for example the last 252 daily bars).
 
 ## Algorithm
@@ -62,6 +63,8 @@ for ln in result.lines:                      # resistance then support, each bes
    - has ≥ 50% of its pivots within ±2 bars of it, or
    - sits inside it with the same slope sign.
 7. **Extension.** The rightmost surviving line whose projection to the last bar passes the same validation is extended (`extended=True`). At most one line per kind is extended.
+   - With `Params(max_projection_gap=0.05)`, the projection must also end within ±5% of the last close; otherwise the next-rightmost line is tried.
+   - The default (`None`) has no distance limit.
 
 Each kind is then cut to `max_lines`, best first. Line fitting costs O(P³) in the number of pivots P. It runs as one numpy broadcast, about 5–20 ms for a 250-bar window.
 
@@ -75,6 +78,7 @@ pytest
 
 - `tests/test_parity.py`: the library reproduces the original scripts' pivots, lines and scores exactly, on recorded synthetic fixtures.
 - `tests/test_api.py`: input handling, edge cases (empty, short, flat, no volume, non-finite) and the output contract.
+- `tests/test_projection_gap.py`: projections respect `max_projection_gap`, and the gap changes only the projection, never which lines are found.
 
 ## Example CLI
 

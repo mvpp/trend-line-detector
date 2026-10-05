@@ -45,6 +45,9 @@ class TrendLine:
     end_time: Hashable
     start_price: float
     end_price: float
+    touch_end_index: int      # last touch (== end_index unless extended)
+    touch_end_time: Hashable
+    touch_end_price: float
     touch_count: int
     touch_indices: tuple[int, ...]   # bar indices of the touching pivots
     score: float

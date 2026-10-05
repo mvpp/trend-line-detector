@@ -17,7 +17,9 @@ extend one line to the last bar.
               pivots within ±2 bars of it, or sits inside it with the same
               slope sign
   extension   the rightmost surviving line whose projection to the last bar
-              passes the same validation is extended (first success only)
+              passes the same validation (and, when max_projection_gap is
+              set, ends within that fraction of the last close) is extended
+              (first success only)
 """
 
 from dataclasses import dataclass
@@ -139,8 +141,13 @@ def _deduplicate(lines: list[FittedLine], price_range: float, p: Params) -> list
     return kept
 
 
+def _near(price: float, ref: float, gap: float) -> bool:
+    return ref > 0 and abs(price / ref - 1) <= gap
+
+
 def _extend_rightmost(lines: list[FittedLine], support: bool, bars: _Bars, p: Params) -> None:
     last = len(bars.close) - 1
+    last_close = float(bars.close[last])
     close_range = float(bars.close.max() - bars.close.min())
     if close_range == 0:
         return
@@ -148,6 +155,9 @@ def _extend_rightmost(lines: list[FittedLine], support: bool, bars: _Bars, p: Pa
     for line in sorted(lines, key=lambda ln: ln.end_bar, reverse=True):
         if line.end_bar >= last:
             return
+        if p.max_projection_gap is not None and not _near(line.slope * last + line.intercept,
+                                                          last_close, p.max_projection_gap):
+            continue
         near_flat = abs(line.slope * (line.end_bar - line.start_bar + 1)) < tol
         lenient = near_flat or line.touch_count >= p.violation_relaxed_min_touches
         v = _violations(line, support, bars, line.end_bar + 1, last)

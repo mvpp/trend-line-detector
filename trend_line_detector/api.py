@@ -30,11 +30,14 @@ def _pivots(ps: PivotSet, kind: Kind, times: list, high_volume: np.ndarray) -> l
 
 
 def _line(f: FittedLine, kind: Kind, times: list) -> TrendLine:
+    touch_end = max(f.touch_bars)
     return TrendLine(
         kind=kind, slope=f.slope, intercept=f.intercept,
         start_index=f.start_bar, end_index=f.end_bar,
         start_time=times[f.start_bar], end_time=times[f.end_bar],
         start_price=f.slope * f.start_bar + f.intercept, end_price=f.slope * f.end_bar + f.intercept,
+        touch_end_index=touch_end, touch_end_time=times[touch_end],
+        touch_end_price=f.slope * touch_end + f.intercept,
         touch_count=f.touch_count, touch_indices=tuple(f.touch_bars),
         score=f.score, extended=f.extended,
     )
