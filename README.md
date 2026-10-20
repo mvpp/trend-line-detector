@@ -43,6 +43,7 @@ for ln in result.lines:                      # resistance then support, each bes
 1. **Volume context.** A bar is high-volume when its volume is above `vol_multiplier` × the 20-bar volume SMA.
    - High-volume bars offer their wicks: High for resistance, Low for support.
    - Normal bars offer their body edges: max/min of Open and Close.
+   - With `Params(pivot_price="wick")`, every bar offers its wicks (High / Low) regardless of volume. The default is `"volume"`.
 2. **Pivots (Williams fractal).**
    - A bar is a pivot when its price is strictly beyond the `left_span` bars before it and the `right_span` bars after it.
    - Edge bars count if one side of the window is complete.
@@ -80,6 +81,7 @@ pytest
 - `tests/test_parity.py`: the library reproduces the original scripts' pivots, lines and scores exactly, on recorded synthetic fixtures.
 - `tests/test_api.py`: input handling, edge cases (empty, short, flat, no volume, non-finite) and the output contract.
 - `tests/test_projection_gap.py`: projections respect `max_projection_gap`, and the gap changes only the projection, never which lines are found.
+- `tests/test_pivot_price.py`: `"wick"` reads every pivot on High / Low; `"volume"` reads normal bars on body edges.
 - `tests/test_time_overlap_dedup.py`: with `time_overlap_dedup`, no two same-kind lines overlap beyond the limit, and the longer one survives.
 
 ## Example CLI

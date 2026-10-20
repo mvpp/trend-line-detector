@@ -55,7 +55,8 @@ def detect(bars: Iterable[Bar | tuple], params: Params = Params()) -> Result:
         return Result((), ())
     times = [b[0] for b in bars]
     open_, high, low, close, volume = _arrays(bars)
-    ctx = classify_volume(open_, high, low, close, volume, params.vol_lookback, params.vol_multiplier)
+    ctx = classify_volume(open_, high, low, close, volume, params.vol_lookback, params.vol_multiplier,
+                          params.pivot_price)
     res, sup, high_volume = detect_pivots(ctx, close, volume, params)
     ohlcv = _Bars(open_, high, low, close, volume, ctx.vol_sma)
 

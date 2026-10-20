@@ -6,15 +6,23 @@ is read from globals, files or the environment.
 """
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass(frozen=True)
 class Params:
+    # ── Pivot price ───────────────────────────────────────────────────
+    # Which price a bar offers to pivots and lines:
+    #   "volume" — High/Low (wicks) on high-volume bars, body edges otherwise
+    #   "wick"   — always High (resistance) / Low (support)
+    pivot_price: Literal["volume", "wick"] = "volume"
+
     # ── Volume context ────────────────────────────────────────────────
     # Rolling volume SMA window, in bars.
     vol_lookback: int = 20
-    # A bar is high-volume when volume > multiplier × SMA. High-volume bars
-    # use High/Low (wicks); normal bars use the body edges.
+    # A bar is high-volume when volume > multiplier × SMA. With
+    # pivot_price="volume", high-volume bars use High/Low (wicks) and normal
+    # bars the body edges.
     vol_multiplier: float = 1.5
 
     # ── Pivot detection (Williams fractal) ────────────────────────────
